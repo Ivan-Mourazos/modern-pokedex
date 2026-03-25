@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+.pnp
+.pnp.js
+
+# Build de producción
+dist/
+dist-ssr/
+
+# Variables de entorno (seguridad)
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

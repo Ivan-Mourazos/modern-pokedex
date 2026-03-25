@@ -1,0 +1,156 @@
+/* =========================================================
+   Sistema de diseño global — Pokédex Moderna
+   Modo oscuro · Glassmorphism · Colores por tipo
+   ========================================================= */
+
+/* ── Fuente global ── */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+/* ── Variables de color ── */
+:root {
+  /* Fondo oscuro profundo */
+  --bg-base:        #0a0a0c;
+  --bg-surface:     #12121a;
+  --bg-card:        rgba(255, 255, 255, 0.04);
+  --bg-card-hover:  rgba(255, 255, 255, 0.08);
+
+  /* Bordes glassmorphism */
+  --border-glass:   rgba(255, 255, 255, 0.08);
+  --border-hover:   rgba(255, 255, 255, 0.16);
+
+  /* Texto */
+  --text-primary:   #f0f0f5;
+  --text-secondary: #8888a0;
+  --text-muted:     #44445a;
+
+  /* Acento principal (rojo Pokédex) */
+  --accent:         #e63946;
+  --accent-glow:    rgba(230, 57, 70, 0.3);
+
+  /* Tipografía */
+  --font-main:      'Outfit', sans-serif;
+
+  /* Radios */
+  --radius-sm:  8px;
+  --radius-md:  16px;
+  --radius-lg:  24px;
+  --radius-xl:  32px;
+
+  /* Sombras */
+  --shadow-card:  0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow:  0 0 40px rgba(230, 57, 70, 0.15);
+}
+
+/* ── Colores por tipo Pokémon ── */
+:root {
+  --type-normal:    #a8a878;
+  --type-fuego:     #ff5c35;
+  --type-agua:      #4da8ff;
+  --type-planta:    #3dca6e;
+  --type-electrico: #f5d020;
+  --type-hielo:     #69d4f0;
+  --type-lucha:     #e84b3a;
+  --type-veneno:    #b85ee0;
+  --type-tierra:    #d4a04a;
+  --type-volador:   #89a7e0;
+  --type-psiquico:  #f85888;
+  --type-bicho:     #a8b820;
+  --type-roca:      #b8a038;
+  --type-fantasma:  #705898;
+  --type-dragon:    #7038f8;
+  --type-siniestro: #705848;
+  --type-acero:     #b8b8d0;
+  --type-hada:      #f5a0c0;
+}
+
+/* ── Reset base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar personalizada ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ── Clases utilitarias de glassmorphism ── */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+}
+
+.glass:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+/* ── Badge de tipo pokémon ── */
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* ── Barra de estadísticas ── */
+.stat-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Animación de entrada ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 0.4s ease both;
+}
+
+/* ── Número de Pokémon ── */
+.poke-number {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+}
