@@ -1,31 +1,32 @@
 /* =========================================================
-   Sistema de diseño global — Pokédex Moderna
-   Modo oscuro · Glassmorphism · Colores por tipo
+   Sistema de diseño global — Pokédex Moderna v2
+   Modo oscuro · Glassmorphism · Colores por tipo · Responsivo
    ========================================================= */
 
 /* ── Fuente global ── */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
 /* ── Variables de color ── */
 :root {
   /* Fondo oscuro profundo */
-  --bg-base:        #0a0a0c;
-  --bg-surface:     #12121a;
-  --bg-card:        rgba(255, 255, 255, 0.04);
-  --bg-card-hover:  rgba(255, 255, 255, 0.08);
+  --bg-base:        #070710;
+  --bg-surface:     #0e0e1a;
+  --bg-card:        rgba(255, 255, 255, 0.035);
+  --bg-card-hover:  rgba(255, 255, 255, 0.07);
 
   /* Bordes glassmorphism */
-  --border-glass:   rgba(255, 255, 255, 0.08);
-  --border-hover:   rgba(255, 255, 255, 0.16);
+  --border-glass:   rgba(255, 255, 255, 0.07);
+  --border-hover:   rgba(255, 255, 255, 0.18);
 
   /* Texto */
-  --text-primary:   #f0f0f5;
-  --text-secondary: #8888a0;
-  --text-muted:     #44445a;
+  --text-primary:   #eeeef5;
+  --text-secondary: #7878a0;
+  --text-muted:     #3a3a58;
 
   /* Acento principal (rojo Pokédex) */
   --accent:         #e63946;
-  --accent-glow:    rgba(230, 57, 70, 0.3);
+  --accent-glow:    rgba(230, 57, 70, 0.35);
+  --accent-hover:   #ff4757;
 
   /* Tipografía */
   --font-main:      'Outfit', sans-serif;
@@ -37,13 +38,16 @@
   --radius-xl:  32px;
 
   /* Sombras */
-  --shadow-card:  0 8px 32px rgba(0, 0, 0, 0.4);
-  --shadow-glow:  0 0 40px rgba(230, 57, 70, 0.15);
+  --shadow-card:  0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow:  0 0 50px rgba(230, 57, 70, 0.2);
+
+  /* Layout */
+  --sidebar-w: 520px;
 }
 
 /* ── Colores por tipo Pokémon ── */
 :root {
-  --type-normal:    #a8a878;
+  --type-normal:    #9a9a7a;
   --type-fuego:     #ff5c35;
   --type-agua:      #4da8ff;
   --type-planta:    #3dca6e;
@@ -56,7 +60,7 @@
   --type-psiquico:  #f85888;
   --type-bicho:     #a8b820;
   --type-roca:      #b8a038;
-  --type-fantasma:  #705898;
+  --type-fantasma:  #7c5faa;
   --type-dragon:    #7038f8;
   --type-siniestro: #705848;
   --type-acero:     #b8b8d0;
@@ -84,19 +88,19 @@ body {
 }
 
 /* ── Scrollbar personalizada ── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
+  background: rgba(255,255,255,0.1);
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-/* ── Clases utilitarias de glassmorphism ── */
+/* ── Glassmorphism base ── */
 .glass {
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
 }
@@ -113,19 +117,19 @@ body {
   gap: 4px;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
 /* ── Barra de estadísticas ── */
 .stat-bar-track {
   width: 100%;
-  height: 6px;
-  background: rgba(255,255,255,0.08);
+  height: 5px;
+  background: rgba(255,255,255,0.07);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -133,24 +137,233 @@ body {
 .stat-bar-fill {
   height: 100%;
   border-radius: 3px;
-  background: var(--accent);
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Animación de entrada ── */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* ── Layout Grid de Pokémon ── */
+.pokemon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  padding: 0 24px 40px;
 }
 
-.fade-up {
-  animation: fadeUp 0.4s ease both;
+@media (max-width: 600px) {
+  .pokemon-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+    padding: 0 12px 40px;
+  }
+}
+
+/* ── Filtro por tipo ── */
+.type-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0 24px;
+  margin-bottom: 8px;
+}
+
+.type-filter-btn {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--font-main);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  border-color: var(--border-glass);
+}
+
+.type-filter-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+}
+
+.type-filter-btn.active {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* ── Header ── */
+.app-header {
+  padding: 36px 24px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Gen selector ── */
+.gen-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  padding: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 560px;
+}
+
+.gen-tab {
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: none;
+  font-family: var(--font-main);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.gen-tab.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.gen-tab:hover:not(.active) {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
 }
 
 /* ── Número de Pokémon ── */
 .poke-number {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.1em;
+}
+
+/* ── Tabs del panel de detalle ── */
+.detail-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: 4px;
+}
+
+.detail-tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-main);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  position: relative;
+}
+
+.detail-tab.active {
+  color: var(--accent);
+}
+
+.detail-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.detail-tab:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* ── Animaciones ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-up {
+  animation: fadeUp 0.35s ease both;
+}
+
+/* ── Fondo con gradiente sutil ── */
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.18;
+}
+
+/* ── Selector de juego ── */
+.juego-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.juego-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 32px 6px 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  outline: none;
+  max-width: 260px;
+}
+
+.juego-select:hover,
+.juego-select:focus {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.juego-select option,
+.juego-select optgroup {
+  background: #111122;
+  color: var(--text-primary);
+}
+
+.juego-select-arrow {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* ── Spinner ── */
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,0.08);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
