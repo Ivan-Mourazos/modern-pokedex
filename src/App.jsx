@@ -1,388 +1,454 @@
 /**
- * App.jsx — v4
- * - Generaciones I–IX completas
- * - Selector de juego sincronizado con la generación correspondiente
- *   (los remakes muestran los Pokémon de la región original)
- * - Carga en lotes para no saturar la API
+ * App.jsx — v5
+ * - Sin generación cargada por defecto (modo buscador)
+ * - Ancho máximo centrado con max-width
+ * - Selector de Gen + Juego rediseñado y unificado
  */
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import {
-  getPokemonList, getPokemonDetail,
+  getPokemonList, getPokemonDetail, getPokemonByPokedex, getAllPokemonNames,
   GENERACIONES, JUEGOS, JUEGOS_PLANA, JUEGO_A_GEN,
   TODOS_LOS_TIPOS, COLOR_POR_TIPO, HEX_POR_TIPO,
 } from './api/pokeApi';
 import SearchBar from './components/SearchBar';
 import PokemonGrid from './components/PokemonGrid';
-import PokemonDetail from './components/PokemonDetail';
+import ExpandedDetail from './components/ExpandedDetail';
+import MovesSearch from './components/MovesSearch';
+import ItemsSearch from './components/ItemsSearch';
+import { SkeletonGrid } from './components/Skeleton';
 
-// Carga en lotes para no saturar la API
-async function enriquecerEnLotes(lista, tamLote = 20) {
+async function enriquecerEnLotes(lista, tamLote = 30) {
   const resultado = [];
   for (let i = 0; i < lista.length; i += tamLote) {
     const lote = lista.slice(i, i + tamLote);
-    const loteEnriquecido = await Promise.all(
-      lote.map((p) =>
-        getPokemonDetail(p.id)
-          .then((d) => ({ ...p, tipos: d.tipos }))
-          .catch(() => ({ ...p, tipos: ['Normal'] }))
-      )
+    const loteEnriquecido = await Promise.allSettled(
+      lote.map(p => getPokemonDetail(p.id).then(d => ({ ...p, tipos: d.tipos })))
     );
-    resultado.push(...loteEnriquecido);
+    loteEnriquecido.forEach((res, idx) => {
+      resultado.push(res.status === 'fulfilled' ? res.value : { ...lote[idx], tipos: ['Normal'] });
+    });
   }
   return resultado;
 }
 
 export default function App() {
+  const [modo, setModo]             = useState('pokemon'); // 'pokemon' | 'movimientos' | 'objetos'
   const [listaPokemon, setListaPokemon] = useState([]);
-  const [cargando, setCargando]         = useState(true);
+  const [cargando, setCargando]         = useState(false);
   const [busqueda, setBusqueda]         = useState('');
   const [seleccionado, setSeleccionado] = useState(null);
-  const [genActiva, setGenActiva]       = useState(1);
-  const [tipoFiltro, setTipoFiltro]     = useState(null);
+  const [genActiva, setGenActiva]       = useState(null);
   const [juegoId, setJuegoId]           = useState('');
+  const [tipoFiltro, setTipoFiltro]     = useState(null);
+  const [errorCarga, setErrorCarga]     = useState(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const debounceRef = useRef(null);
+  const indiceRef   = useRef([]);          // [{id, nombre, nombreApi, imagen, imagenDefault}]
+  const enriqueciendoRef = useRef(false);  // evita peticiones solapadas
 
-  const juegoLabel = juegoId
-    ? JUEGOS_PLANA.find((j) => j.id === juegoId)?.label?.replace(' ★', '') ?? juegoId
-    : null;
+  // ── Helpers ──────────────────────────────────────────────
 
-  // ── Sincronización juego ↔ generación ────────────────────
+  const hayFiltroActivo = genActiva !== null || juegoId !== '' || busqueda.trim().length >= 2;
+  const juegoLabel = juegoId ? JUEGOS_PLANA.find(j => j.id === juegoId)?.label?.replace(' ★', '') ?? juegoId : null;
+  const genLabel   = genActiva ? GENERACIONES.find(g => g.id === genActiva)?.label ?? '' : '';
 
-  // Al seleccionar un juego → cambiar automáticamente la generación
-  function handleSeleccionarJuego(nuevoJuegoId) {
-    setJuegoId(nuevoJuegoId);
-    if (nuevoJuegoId) {
-      const gen = JUEGO_A_GEN[nuevoJuegoId];
-      if (gen && gen !== genActiva) {
-        setGenActiva(gen);
-      }
+  // Cargar el índice completo de nombres al montar (una vez, en background)
+  useEffect(() => {
+    getAllPokemonNames()
+      .then(lista => { indiceRef.current = lista; })
+      .catch(console.error);
+  }, []);
+
+  // ── Handlers de filtro ───────────────────────────────────
+
+  function handleSeleccionarJuego(id) {
+    setJuegoId(id);
+    if (id) {
+      const gen = JUEGO_A_GEN[id];
+      if (gen) setGenActiva(gen);
     }
+    setSeleccionado(null);
   }
 
-  // Al cambiar la generación manualmente → limpiar juego solo si no coincide
-  function handleSeleccionarGen(nuevaGen) {
-    if (nuevaGen === genActiva) return;
-    setGenActiva(nuevaGen);
-    // Si el juego activo no pertenece a esta gen, lo limpiamos
-    if (juegoId && JUEGO_A_GEN[juegoId] !== nuevaGen) {
-      setJuegoId('');
-    }
+  function handleSeleccionarGen(id) {
+    setGenActiva(id === genActiva ? null : id);
+    setJuegoId('');
+    setSeleccionado(null);
   }
 
-  // ── Carga de Pokémon ──────────────────────────────────────
-
-  const cargarGen = useCallback(async (genId) => {
-    const gen = GENERACIONES.find((g) => g.id === genId);
-    if (!gen) return;
-    setCargando(true);
+  function limpiarFiltros() {
+    setGenActiva(null);
+    setJuegoId('');
+    setBusqueda('');
     setListaPokemon([]);
     setSeleccionado(null);
-    setTipoFiltro(null);
-    setBusqueda('');
+  }
+
+  // Búsqueda incremental (sin gen/juego): filtra el índice local
+  function handleBusqueda(valor) {
+    setBusqueda(valor);
+    if (genActiva || juegoId) return; // filtrado local en pokemonFiltrados, se aplica abajo
+
+    clearTimeout(debounceRef.current);
+
+    if (valor.trim().length < 2) {
+      setListaPokemon([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      const q = valor.trim().toLowerCase();
+      const indice = indiceRef.current;
+
+      if (!indice.length) {
+        // Índice todavía no disponible → esperar y reintentar
+        const lista = await getAllPokemonNames();
+        indiceRef.current = lista;
+      }
+
+      // Filtrado: primero prioridad "empieza por", luego "contiene"
+      const empiezaPor = indiceRef.current.filter(p =>
+        p.nombreApi.startsWith(q) || p.nombre.toLowerCase().startsWith(q)
+      );
+      const contiene = indiceRef.current.filter(p =>
+        !p.nombreApi.startsWith(q) &&
+        !p.nombre.toLowerCase().startsWith(q) &&
+        (p.nombreApi.includes(q) || p.nombre.toLowerCase().includes(q))
+      );
+
+      // Máx 60 resultados (30 + 30)
+      const candidatos = [...empiezaPor.slice(0, 30), ...contiene.slice(0, 30)];
+
+      if (!candidatos.length) {
+        setListaPokemon([]);
+        return;
+      }
+
+      // Mostrar inmediatamente sin tipos (para que aparezcan tarjetas rápido)
+      setListaPokemon(candidatos);
+      setCargando(true);
+
+      // Enriquecer con tipos en background
+      try {
+        const enriquecidos = await enriquecerEnLotes(candidatos, 20);
+        setListaPokemon(enriquecidos);
+      } catch { /* mantener candidatos sin tipos */ }
+      finally { setCargando(false); }
+    }, 300);
+  }
+
+  // ── Carga de datos ────────────────────────────────────────
+
+  const cargarDatos = useCallback(async () => {
+    // Solo cargar si hay una gen o juego explícitamente seleccionado
+    // La búsqueda libre usa su propio flujo (handleBusqueda)
+    if (!genActiva && !juegoId) return;
+    setCargando(true);
+    setListaPokemon([]);
+    setErrorCarga(null);
     try {
-      const lista = await getPokemonList(gen.limit, gen.offset);
-      const enriquecidos = await enriquecerEnLotes(lista, 20);
+      let lista = [];
+      if (juegoId) {
+        const juego = JUEGOS_PLANA.find(j => j.id === juegoId);
+        lista = await getPokemonByPokedex(juego.pokedexId);
+      } else {
+        const gen = GENERACIONES.find(g => g.id === genActiva);
+        lista = await getPokemonList(gen.limit, gen.offset);
+      }
+      const enriquecidos = await enriquecerEnLotes(lista, 30);
       setListaPokemon(enriquecidos);
     } catch (err) {
-      console.error('Error al cargar generación:', err);
+      console.error(err);
+      setErrorCarga('No se pudo conectar con la PokéAPI. Inténtalo de nuevo.');
     } finally {
       setCargando(false);
     }
+  }, [genActiva, juegoId]);
+
+  useEffect(() => { cargarDatos(); }, [cargarDatos]);
+
+  useEffect(() => {
+    const s = () => setShowScrollTop(window.scrollY > 400);
+    window.addEventListener('scroll', s);
+    return () => window.removeEventListener('scroll', s);
   }, []);
 
-  useEffect(() => { cargarGen(genActiva); }, [genActiva, cargarGen]);
-
-  // ── Filtros ───────────────────────────────────────────────
+  // ── Filtro local (tipo + búsqueda) ────────────────────────
 
   const pokemonFiltrados = useMemo(() => {
     let res = listaPokemon;
-    if (tipoFiltro) res = res.filter((p) => p.tipos?.includes(tipoFiltro));
+    if (tipoFiltro) res = res.filter(p => p.tipos?.includes(tipoFiltro));
     const q = busqueda.trim().toLowerCase();
-    if (q) res = res.filter(
-      (p) => p.nombre.toLowerCase().includes(q) || String(p.id).padStart(3, '0').includes(q)
+    if (q) res = res.filter(p =>
+      p.nombre.toLowerCase().includes(q) || String(p.id).padStart(3, '0').includes(q)
     );
     return res;
   }, [busqueda, tipoFiltro, listaPokemon]);
 
   function handleSeleccionarEvolucion(poke) {
-    const enLista = listaPokemon.find((p) => p.id === poke.id);
+    const enLista = listaPokemon.find(p => p.id === poke.id);
     setSeleccionado(enLista ?? poke);
   }
 
-  const panelAbierto = seleccionado !== null;
-  const colorOrbe = seleccionado?.tipos?.[0]
-    ? HEX_POR_TIPO[seleccionado.tipos[0]] ?? '#e63946'
-    : '#e63946';
-
-  const genLabel = GENERACIONES.find((g) => g.id === genActiva)?.label ?? '';
+  const colorOrbe = seleccionado?.tipos?.[0] ? HEX_POR_TIPO[seleccionado.tipos[0]] ?? '#e63946' : '#e63946';
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'var(--bg-base)',
-      position: 'relative',
-      transition: 'padding-right 0.4s cubic-bezier(0.4,0,0.2,1)',
-      paddingRight: panelAbierto ? 'min(var(--sidebar-w), 100vw)' : '0',
-    }}>
-      {/* Orbes de fondo */}
-      <div className="bg-orb" style={{
-        width: '600px', height: '600px',
-        top: '-200px',
-        right: panelAbierto ? 'calc(min(var(--sidebar-w), 100vw) - 80px)' : '-100px',
-        background: colorOrbe,
-        transition: 'background 1s ease, right 0.4s ease',
-      }} />
-      <div className="bg-orb" style={{
-        width: '350px', height: '350px',
-        bottom: '0', left: '-80px',
-        background: '#4da8ff', opacity: 0.1,
-      }} />
+    <LayoutGroup>
+    <motion.div layout className="app-root">
+      {/* Orbes decorativos */}
+      <div className="bg-orb" style={{ width: '600px', height: '600px', top: '-200px', right: '-100px', background: colorOrbe, transition: 'background 1s ease' }} />
+      <div className="bg-orb" style={{ width: '350px', height: '350px', bottom: '0', left: '-80px', background: '#4da8ff', opacity: 0.1 }} />
 
-      {/* ── Encabezado ── */}
-      <header className="app-header">
-        {/* Logo */}
-        <motion.div
-          initial={{ opacity: 0, y: -24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          style={{ display: 'flex', alignItems: 'center', gap: '14px' }}
-        >
-          <div style={{
-            width: '46px', height: '46px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--accent) 50%, #fff 50%)',
-            border: '3px solid #fff',
-            boxShadow: '0 0 24px var(--accent-glow)',
-            position: 'relative', flexShrink: 0,
-          }}>
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%,-50%)',
-              width: '10px', height: '10px',
-              borderRadius: '50%', background: '#fff', border: '2px solid #888',
-            }} />
-          </div>
-          <h1 style={{
-            fontSize: 'clamp(1.7rem, 4vw, 2.6rem)',
-            fontWeight: 900,
-            background: 'linear-gradient(135deg, #fff 0%, rgba(230,57,70,0.8) 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            letterSpacing: '-0.02em',
-          }}>
-            Pokédex
-          </h1>
-        </motion.div>
+      {/* Botón volver arriba */}
+      <AnimatePresence mode="popLayout">
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="scroll-top-btn"
+            style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 100 }}
+            aria-label="Volver arriba"
+          >↑</motion.button>
+        )}
+      </AnimatePresence>
 
-        {/* Selector de juego + generación */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          style={{ marginTop: '18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', width: '100%' }}
-        >
-          {/* Selector de juego */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{
-              fontSize: '0.72rem', color: 'var(--text-muted)',
-              fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-            }}>
-              Juego
-            </span>
-            <div className="juego-select-wrap">
-              <select
-                className="juego-select"
-                value={juegoId}
-                onChange={(e) => handleSeleccionarJuego(e.target.value)}
-                aria-label="Seleccionar juego"
-              >
-                <option value="">— Sin filtro de juego —</option>
-                {JUEGOS.map((grupo) => (
-                  <optgroup key={grupo.grupo} label={grupo.grupo}>
-                    {grupo.juegos.map((j) => (
-                      <option key={j.id} value={j.id}>{j.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <span className="juego-select-arrow">▾</span>
-            </div>
-            {juegoId && (
+      {/* ── Contenedor centrado ── */}
+      <div className="app-container">
+
+        {/* ══ HEADER ══ */}
+        <header className="app-header">
+
+          {/* Logo */}
+          <motion.div className="logo-container" initial={{ opacity: 0, y: -24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+            <div className="pokeball-logo" />
+            <h1 className="app-title">Pokédex</h1>
+          </motion.div>
+
+          {/* ── SELECTOR DE MODO ── */}
+          <motion.div
+            className="mode-selector"
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+          >
+            {[
+              { id: 'pokemon',      label: 'Pokémon',     icon: '⬡' },
+              { id: 'movimientos',  label: 'Movimientos', icon: '⚡' },
+              { id: 'objetos',      label: 'Objetos',     icon: '🎒' },
+            ].map(m => (
               <button
-                onClick={() => setJuegoId('')}
-                title="Quitar filtro de juego"
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1,
-                  padding: '4px', borderRadius: '50%',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
-                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                key={m.id}
+                className={`mode-tab ${modo === m.id ? 'active' : ''}`}
+                onClick={() => setModo(m.id)}
               >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Nota de remake */}
-          {juegoId && JUEGO_A_GEN[juegoId] && (
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={juegoId}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                style={{
-                  fontSize: '0.72rem',
-                  color: 'var(--text-secondary)',
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  padding: '5px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span style={{ color: 'var(--accent)' }}>⬡</span>
-                Mostrando Pokémon de {genLabel}
-                {['firered-leafgreen','heartgold-soulsilver','omegaruby-alphasapphire','brilliant-diamond-and-shining-pearl','legends-arceus'].includes(juegoId) && (
-                  <span style={{ color: 'var(--text-muted)' }}>(remake)</span>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          )}
-
-          {/* Tabs de generación */}
-          <div className="gen-tabs" style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
-            {GENERACIONES.map((g) => (
-              <button
-                key={g.id}
-                className={`gen-tab${genActiva === g.id ? ' active' : ''}`}
-                onClick={() => handleSeleccionarGen(g.id)}
-                title={`Ver Pokémon de ${g.label}`}
-              >
-                {g.label}
+                <span className="mode-tab-icon">{m.icon}</span>
+                <span>{m.label}</span>
+                {modo === m.id && <motion.div layoutId="mode-indicator" className="mode-indicator" />}
               </button>
             ))}
-          </div>
-        </motion.div>
+          </motion.div>
 
-        {/* Contador */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.25 }}
-          style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: '10px' }}
-        >
-          {cargando
-            ? `Cargando ${genLabel}…`
-            : `${pokemonFiltrados.length} de ${listaPokemon.length} Pokémon`}
-          {juegoLabel && !cargando && (
-            <span style={{ color: 'var(--accent)', marginLeft: '8px' }}>· {juegoLabel}</span>
+          {/* ── FILTROS POKÉMON (solo si modo pokemon) ── */}
+          {modo === 'pokemon' && (
+          <motion.div layout className="filter-block" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+
+            {/* Fila superior: Gen + Juego */}
+            <div className="filter-row-top">
+
+              {/* Grupo Generación */}
+              <div className="filter-group">
+                <span className="filter-group-label">Generación</span>
+                <div className="gen-pills-row">
+                  {GENERACIONES.map(g => (
+                    <button
+                      key={g.id}
+                      className={`gen-pill ${genActiva === g.id && !juegoId ? 'active' : ''}`}
+                      onClick={() => handleSeleccionarGen(g.id)}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="filter-divider" />
+
+              {/* Grupo Juego */}
+              <div className="filter-group filter-group-game">
+                <span className="filter-group-label">Juego específico</span>
+                <div className="game-selector-row">
+                  <div className="juego-select-wrap">
+                    <select
+                      className="juego-select"
+                      value={juegoId}
+                      onChange={e => handleSeleccionarJuego(e.target.value)}
+                      aria-label="Seleccionar juego"
+                    >
+                      <option value="">— Todos los juegos —</option>
+                      {JUEGOS.map(grupo => (
+                        <optgroup key={grupo.grupo} label={grupo.grupo}>
+                          {grupo.juegos.map(j => (
+                            <option key={j.id} value={j.id}>{j.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <span className="juego-select-arrow">▾</span>
+                  </div>
+                  {hayFiltroActivo && (
+                    <button className="clear-filter-btn" onClick={limpiarFiltros} title="Limpiar filtros">
+                      ✕ Limpiar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Chip de contexto activo */}
+            <AnimatePresence>
+              {hayFiltroActivo && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                  className="active-filter-chip"
+                >
+                  <span className="chip-dot" />
+                  <span>
+                    {juegoLabel ? `Juego: ${juegoLabel}` : `Generación: ${genLabel}`}
+                    {!cargando && ` · ${pokemonFiltrados.length} Pokémon`}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
           )}
-        </motion.p>
 
-        {/* Barra de búsqueda */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3 }}
-          style={{ width: '100%', display: 'flex', justifyContent: 'center', marginTop: '12px', marginBottom: '16px' }}
-        >
-          <SearchBar valor={busqueda} onChange={setBusqueda} />
-        </motion.div>
-
-        {/* Filtro por tipo */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35 }}
-          className="type-filter-bar"
-          style={{ marginBottom: '20px' }}
-        >
-          <button
-            className={`type-filter-btn${tipoFiltro === null ? ' active' : ''}`}
-            style={tipoFiltro === null
-              ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }
-              : {}}
-            onClick={() => setTipoFiltro(null)}
-          >
-            Todos
-          </button>
-          {TODOS_LOS_TIPOS.map((tipo) => (
-            <button
-              key={tipo}
-              className={`type-filter-btn${tipoFiltro === tipo ? ' active' : ''}`}
-              style={tipoFiltro === tipo
-                ? { background: COLOR_POR_TIPO[tipo], borderColor: COLOR_POR_TIPO[tipo] }
-                : {}}
-              onClick={() => setTipoFiltro(tipoFiltro === tipo ? null : tipo)}
-            >
-              {tipo}
-            </button>
-          ))}
-        </motion.div>
-      </header>
-
-      {/* ── Cuerpo ── */}
-      <main style={{ flex: 1, position: 'relative', zIndex: 1 }}>
-        <AnimatePresence mode="wait">
-          {cargando ? (
-            <motion.div
-              key="cargando"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                minHeight: '40vh', gap: '20px', color: 'var(--text-secondary)',
-              }}
-            >
-              <div className="spinner" />
-              <span style={{ fontSize: '0.88rem' }}>Cargando {genLabel}…</span>
+          {/* Barra de búsqueda Pokémon + filtro de tipo (solo modo pokemon) */}
+          {modo === 'pokemon' && (
+            <motion.div layout>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
+                style={{ width: '100%', display: 'flex', justifyContent: 'center', marginTop: '16px', marginBottom: '8px' }}
+              >
+                <SearchBar valor={busqueda} onChange={handleBusqueda} />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}
+                className="type-filter-bar" style={{ marginBottom: '20px' }}
+              >
+                <button
+                  className={`type-filter-btn${tipoFiltro === null ? ' active' : ''}`}
+                  style={tipoFiltro === null ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}}
+                  onClick={() => setTipoFiltro(null)}
+                >
+                  Todos
+                </button>
+                {TODOS_LOS_TIPOS.map(tipo => (
+                  <button
+                    key={tipo}
+                    className={`type-filter-btn${tipoFiltro === tipo ? ' active' : ''}`}
+                    style={tipoFiltro === tipo ? { background: COLOR_POR_TIPO[tipo], borderColor: COLOR_POR_TIPO[tipo] } : {}}
+                    onClick={() => setTipoFiltro(tipoFiltro === tipo ? null : tipo)}
+                  >
+                    {tipo}
+                  </button>
+                ))}
+              </motion.div>
             </motion.div>
-          ) : (
-            <motion.div
-              key={`gen-${genActiva}-${tipoFiltro}`}
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+          )}
+        </header>
+
+        {/* ── Modo Movimientos ── */}
+        {modo === 'movimientos' && (
+          <MovesSearch />
+        )}
+
+        {/* ── Modo Objetos ── */}
+        {modo === 'objetos' && (
+          <ItemsSearch />
+        )}
+
+        {/* ── Modo Pokémon ── */}
+        {modo === 'pokemon' && (
+          <motion.div layout>
+        {/* ── Detalle expandido ── */}
+        <AnimatePresence mode="popLayout">
+          {seleccionado && (
+            <motion.div 
+              key="detail"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              style={{ padding: '0 0 12px', position: 'relative', zIndex: 4, overflow: 'hidden' }}
             >
-              <PokemonGrid
-                pokemons={pokemonFiltrados}
-                seleccionado={seleccionado}
-                onSeleccionar={setSeleccionado}
+              <ExpandedDetail
+                pokemon={seleccionado}
+                juegoId={juegoId}
+                onCerrar={() => setSeleccionado(null)}
+                onSeleccionar={handleSeleccionarEvolucion}
               />
             </motion.div>
           )}
         </AnimatePresence>
-      </main>
 
-      {/* ── Panel lateral ── */}
-      <PokemonDetail
-        pokemon={seleccionado}
-        juegoId={juegoId}
-        onCerrar={() => setSeleccionado(null)}
-        onSeleccionar={handleSeleccionarEvolucion}
-      />
+        {/* ── Cuerpo principal ── */}
+        <main style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+          <AnimatePresence mode="wait">
+            {!hayFiltroActivo ? (
+              <motion.div
+                key="empty-state"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="empty-state"
+              >
+                <div className="empty-state-icon">⬡</div>
+                <h2 className="empty-state-title">Selecciona una generación o juego</h2>
+                <p className="empty-state-sub">Usa los filtros de arriba para explorar la Pokédex o busca directamente por nombre</p>
+              </motion.div>
+            ) : errorCarga ? (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={{ textAlign: 'center', padding: '80px 24px', color: 'var(--accent)' }}
+              >
+                <p style={{ fontSize: '1.2rem', fontWeight: 600 }}>{errorCarga}</p>
+                <button onClick={cargarDatos} className="type-filter-btn" style={{ marginTop: '16px', color: 'var(--text-primary)' }}>
+                  Reintentar
+                </button>
+              </motion.div>
+            ) : cargando ? (
+              <motion.div
+                key="skeleton-grid"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              >
+                <SkeletonGrid count={20} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`gen-${genActiva}-${juegoId}-${tipoFiltro}`}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+              >
+                <PokemonGrid
+                  pokemons={pokemonFiltrados}
+                  seleccionado={seleccionado}
+                  onSeleccionar={handleSeleccionarEvolucion}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </main>
+          </motion.div>
+        )}
+      </div>
 
-      {/* ── Pie ── */}
-      <footer style={{
-        textAlign: 'center', padding: '16px',
-        color: 'var(--text-muted)', fontSize: '0.72rem',
-        borderTop: '1px solid var(--border-glass)',
-        position: 'relative', zIndex: 1,
-      }}>
-        Datos de{' '}
-        <a href="https://pokeapi.co" target="_blank" rel="noopener noreferrer"
-          style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>
-          PokéAPI
-        </a>
-        {' '}· Pokémon es marca de Nintendo / Game Freak
-      </footer>
-    </div>
+      {/* ── Footer ── */}
+        <footer className="app-footer">
+          Datos de{' '}
+          <a href="https://pokeapi.co" target="_blank" rel="noopener noreferrer">PokéAPI</a>
+          {' '}· Pokémon es marca de Nintendo / Game Freak
+        </footer>
+      </motion.div>
+    </LayoutGroup>
   );
 }

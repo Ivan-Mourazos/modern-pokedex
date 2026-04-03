@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Zap, Shield, Sword, Wind, Info, BarChart2, GitMerge, BookOpen } from 'lucide-react';
 import {
   getPokemonDetail, getEspecie, getCadenaEvolutiva,
-  getNombreHabilidadEs,
+  getNombreHabilidadEs, getNombreMovimientoEs,
   filtrarMovimientos, METODOS_APRENDIZAJE_ES,
   COLOR_POR_TIPO, HEX_POR_TIPO,
   esGenI,
@@ -487,6 +487,20 @@ function TabEvolucion({ evolucion, detalle, colorPrimario, onSeleccionar }) {
 /* ── Tab Movimientos ── */
 function TabMovimientos({ movimientos, juegoId }) {
   const [metodoActivo, setMetodoActivo] = useState('nivelUp');
+  const [nombresEs, setNombresEs]       = useState({});
+
+  useEffect(() => {
+    if (!movimientos) return;
+    
+    // Solo traducimos los movimientos del método activo para no saturar
+    const lista = movimientos[metodoActivo] || [];
+    
+    lista.forEach(async (mov) => {
+      if (nombresEs[mov.urlApi]) return;
+      const nombreEs = await getNombreMovimientoEs(mov.urlApi, mov.nombre);
+      setNombresEs(prev => ({ ...prev, [mov.urlApi]: nombreEs }));
+    });
+  }, [movimientos, metodoActivo]);
 
   if (!juegoId) {
     return (
@@ -568,7 +582,7 @@ function TabMovimientos({ movimientos, juegoId }) {
             borderRadius: '8px',
           }}>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 500 }}>
-              {mov.nombre}
+              {nombresEs[mov.urlApi] || mov.nombre}
             </span>
             {activo === 'nivelUp' && mov.nivel > 0 && (
               <span style={{

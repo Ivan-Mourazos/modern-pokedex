@@ -1,6 +1,5 @@
 /**
- * PokemonGrid.jsx — Grid responsivo de tarjetas Pokémon
- * Reemplaza el carrusel para mejor usabilidad en todas las pantallas.
+ * PokemonGrid.jsx — Grid limpio de tarjetas (sin detalle inline)
  */
 import { motion } from 'framer-motion';
 import PokemonCard from './PokemonCard';
@@ -9,14 +8,9 @@ export default function PokemonGrid({ pokemons, seleccionado, onSeleccionar }) {
   if (!pokemons.length) {
     return (
       <div style={{
-        textAlign: 'center',
-        color: 'var(--text-secondary)',
-        padding: '80px 24px',
-        fontSize: '0.95rem',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '12px',
+        textAlign: 'center', color: 'var(--text-secondary)',
+        padding: '80px 24px', fontSize: '0.95rem',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
       }}>
         <span style={{ fontSize: '2.5rem' }}>🔍</span>
         <span>No se encontraron Pokémon con ese criterio.</span>
@@ -34,7 +28,7 @@ export default function PokemonGrid({ pokemons, seleccionado, onSeleccionar }) {
           key={p.id}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: Math.min(i * 0.018, 0.5), duration: 0.3 }}
+          transition={{ delay: Math.min(i * 0.012, 0.4), duration: 0.28 }}
         >
           <PokemonCard
             pokemon={p}
